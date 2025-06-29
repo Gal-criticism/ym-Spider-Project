@@ -54,18 +54,14 @@ class MatchingEngine:
             bgm_id = str(row['id']) if 'id' in row and pd.notna(row['id']) else f"ROW_{idx}"
             
             if bgm_id in processed_ids:
-                print(f"跳过 ID {bgm_id} （已处理）")
                 continue
 
             jp_name = str(row["日文名"]).strip() if pd.notna(row["日文名"]) else ""
             cn_name = str(row["中文名"]).strip() if pd.notna(row["中文名"]) else ""
 
             if not jp_name and not cn_name:
-                print(f"跳过 ID {bgm_id}：日文名和中文名均为空")
                 self.data_processor.append_unmatched_to_excel(f"ID_{bgm_id}_空名称", unmatched_file)
                 continue
-
-            print(f"\n正在匹配 ID {bgm_id} (日文名: '{jp_name}', 中文名: '{cn_name}')")
 
             best_match = None
             best_score = -1.0  # 初始化最高得分
@@ -130,11 +126,9 @@ class MatchingEngine:
                     "匹配来源": match_source
                 }
                 row_list.append(row_data)
-                print(f" - 匹配成功：{best_match['name']} (得分: {best_match['score']})")
 
                 self.data_processor.append_to_excel(row_list, output_file)
             else:
-                print(" - 未匹配到任何项")
                 self.data_processor.append_unmatched_to_excel(f"ID_{bgm_id}_未匹配", unmatched_file)
 
             # 避免触发接口限流
@@ -175,7 +169,6 @@ class MatchingEngine:
             bgm_id = str(row['bgm_id']) if 'bgm_id' in row and pd.notna(row['bgm_id']) else f"ROW_{idx}"
 
             if bgm_id in processed_ids:
-                print(f"跳过 ID {bgm_id} （已处理）")
                 continue
 
             # 只用别名列进行匹配
@@ -189,8 +182,6 @@ class MatchingEngine:
                     original_score = float(row['score'])
                 except (ValueError, TypeError):
                     pass # 如果转换失败，则保持0.0
-
-            print(f"\n正在匹配 ID {bgm_id} (别名: {aliases}) (原始分数: {original_score})")
 
             # 2. 查找所有别名中的最佳匹配
             best_match = None
@@ -206,7 +197,6 @@ class MatchingEngine:
             
             # 3. 比较分数，决定使用新数据还是保留原始数据
             if best_match and best_score > original_score:
-                print(f" - 别名匹配分数更高 ({best_score} > {original_score})。使用新数据。")
                 row_list: List[Dict[str, Any]] = []
                 # ---- 公司信息处理 (仅当别名更优时才查询) ----
                 org_id = str(best_match.get("orgId", ""))
@@ -248,12 +238,6 @@ class MatchingEngine:
                 row_list.append(row_data)
                 self.data_processor.append_to_excel(row_list, output_file)
             else:
-                # 如果原始分数更高，或别名未匹配成功
-                if best_match:
-                     print(f" - 原始分数 ({original_score}) 更高或相等 (别名最高分: {best_score})。保留原始数据。")
-                else:
-                     print(f" - 未找到任何别名匹配项。保留原始数据。")
-               
                 # ---- 组装原始行数据 ----
                 row_data = {
                     "bgm_id": bgm_id,

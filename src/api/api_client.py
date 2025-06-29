@@ -2,6 +2,8 @@ import json
 import requests
 from typing import List, Dict, Any, Optional
 
+from ..utils.logger import Logger
+
 
 class YMGalAPIClient:
     """月幕游戏API客户端"""
@@ -11,6 +13,7 @@ class YMGalAPIClient:
         self.client_id = "ymgal"
         self.client_secret = "luna0327"
         self.token_ref = {"value": None}
+        self.logger = Logger(silent_mode=True)  # 使用静默模式
     
     def get_access_token(self) -> Optional[str]:
         """
@@ -34,7 +37,7 @@ class YMGalAPIClient:
             return response.json().get("access_token")
 
         # 失败时输出详细信息，方便排查
-        print("获取 token 失败:", response.status_code, response.text)
+        self.logger.log_error(f"获取 token 失败: {response.status_code}, {response.text}")
         return None
     
     def parse_search_response(self, response: requests.Response) -> List[Dict[str, Any]]:
@@ -58,13 +61,11 @@ class YMGalAPIClient:
         """
         try:
             response_data = response.json()
-            # --- 调试输出，可根据需要关闭 ------------------------------------
-            print("\n完整 API 响应：")
-            print(json.dumps(response_data, indent=2, ensure_ascii=False))
-            # ------------------------------------------------------------------
+            # 将API响应保存到日志文件
+            self.logger.log_api_response("search_game", response_data)
             results = response_data.get("data", {}).get("result", [])
         except Exception as exc:
-            print("解析 response 失败：", exc)
+            self.logger.log_error(f"解析 response 失败：{exc}")
             return []
 
         parsed: List[Dict[str, Any]] = []
@@ -83,8 +84,12 @@ class YMGalAPIClient:
                 "description": item.get("orgDescription", "")
             }
 
+            # 移除会社信息的INFO输出，只记录到日志文件
             if org_info:
-                print(f"找到会社信息：{org_info.get('name', '')}")
+                self.logger.log_api_response("org_info_found", {
+                    "org_name": org_info.get('name', ''),
+                    "org_id": org_info.get('id', '')
+                })
 
             parsed.append({
                 "name": item.get("name", ""),
@@ -162,17 +167,17 @@ class YMGalAPIClient:
 
             # 2. Token 失效 -> 刷新后重试
             elif response.status_code == 401:
-                print("Token 失效，正在重新获取…")
+                self.logger.log_important("Token 失效，正在重新获取…")
                 new_token = self.get_access_token()
                 if new_token:
                     self.token_ref["value"] = new_token
                     continue
-                print("重新获取 token 失败")
+                self.logger.log_error("重新获取 token 失败")
                 return []
 
             # 3. 其它错误 -> 直接返回空
             else:
-                print(f"搜索失败: {response.status_code}, {response.text}")
+                self.logger.log_error(f"搜索失败: {response.status_code}, {response.text}")
                 return []
 
         # 超出重试次数
@@ -194,16 +199,17 @@ class YMGalAPIClient:
         }
 
         try:
-            # ---------- 调试信息 --------------
-            print("\n正在获取会社信息… ID:", org_id)
-            # ---------------------------------
+            # 移除控制台输出，只记录到日志文件
+            self.logger.log_api_response("org_details_request", {"org_id": org_id})
             response = requests.get(url, params=params, headers=headers, timeout=10)
 
             if response.status_code == 200:
                 data = response.json()
+                # 记录会社信息API响应
+                self.logger.log_api_response(f"org_details_{org_id}", data)
                 org_data = data.get("data", {}).get("org", {})
                 if not org_data:
-                    print("API 响应中未找到会社信息")
+                    self.logger.log_info("API 响应中未找到会社信息")
                     return None
 
                 # 按优先级提取官网地址，fallback 使用第一个
@@ -232,14 +238,14 @@ class YMGalAPIClient:
                 return result
 
             if response.status_code == 401:  # token 失效, 交由外层处理
-                print("公司信息获取时 token 失效")
+                self.logger.log_info("公司信息获取时 token 失效")
                 return None
 
-            print(f"获取会社信息失败: {response.status_code}")
+            self.logger.log_error(f"获取会社信息失败: {response.status_code}")
             return None
 
         except Exception as exc:
-            print(f"获取会社信息时发生错误: {exc}")
+            self.logger.log_error(f"获取会社信息时发生错误: {exc}")
             return None
     
     def initialize_token(self) -> bool:
