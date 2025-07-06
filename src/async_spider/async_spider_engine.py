@@ -315,15 +315,16 @@ class AsyncSpiderEngine:
                             "website": "",
                             "description": ""
                         }
+                # 强制所有字段都写入，严格对齐DataProcessor.EXCEL_COLUMNS_MATCHED
                 result_data = {
                     "bgm_id": bgm_id,
-                    "bgm游戏": jp_name if jp_name else cn_name,
+                    "bgm游戏": game_data.get('游戏名', ''),
                     "日文名 (原始)": jp_name,
                     "中文名 (原始)": cn_name,
-                    "name": best_match["name"],
-                    "chineseName": best_match["chineseName"],
-                    "ym_id": best_match["ym_id"],
-                    "score": best_match["score"],
+                    "name": best_match.get("name", ""),
+                    "chineseName": best_match.get("chineseName", ""),
+                    "ym_id": best_match.get("ym_id", ""),
+                    "score": best_match.get("score", ""),
                     "orgId": org_id,
                     "orgName": (org_info or {}).get("name", ""),
                     "orgWebsite": (org_info or {}).get("website", ""),
@@ -337,7 +338,7 @@ class AsyncSpiderEngine:
             else:
                 unmatched_data = {
                     "bgm_id": bgm_id,
-                    "bgm游戏": jp_name if jp_name else cn_name,
+                    "bgm游戏": game_data.get('游戏名', ''),
                     "日文名 (原始)": jp_name,
                     "中文名 (原始)": cn_name,
                     "name": "",
@@ -368,7 +369,6 @@ class AsyncSpiderEngine:
                 return
             import pandas as pd
             df = pd.read_excel(input_file)
-            # 只处理未断点的
             df = df[~df['id'].astype(str).isin(self.processed_ids)]
             all_rows = df.to_dict(orient='records')
             batch_size = 10
@@ -383,6 +383,7 @@ class AsyncSpiderEngine:
             await buffer_manager.start()
             self.session = await self._create_session()
             total = len(all_rows)
+            processed = 0
             for batch_start in range(0, total, batch_size):
                 batch = all_rows[batch_start:batch_start+batch_size]
                 fail_items = []
@@ -405,6 +406,8 @@ class AsyncSpiderEngine:
                     else:
                         fail_items.append(item)
                     await asyncio.sleep(delay)
+                processed += len(batch)
+                print(f"进度: {min(processed, total)}/{total} ({min(processed, total)/total*100:.1f}%)")
                 # 动态调整速率
                 total_req = success + fail_503
                 rate_503 = fail_503 / total_req if total_req else 0
@@ -412,11 +415,8 @@ class AsyncSpiderEngine:
                     delay = min(delay + 1, max_delay)
                 elif rate_503 < 0.05:
                     delay = max(delay - 0.2, min_delay)
-                print(f"本批进度: {min(batch_start+batch_size, total)}/{total}，503比例: {rate_503:.2%}，下批间隔: {delay:.2f}s")
                 await asyncio.sleep(10)
-                # 失败条目自动重试
                 if fail_items:
-                    print(f"本批有{len(fail_items)}条因503未成功，将自动重试...")
                     all_rows.extend(fail_items)
             await asyncio.sleep(2)
         except Exception as e:
@@ -479,89 +479,63 @@ class AsyncSpiderEngine:
             buffer_manager: 缓冲区管理器
         """
         try:
-            # 提取游戏信息
             bgm_id = str(game_data.get('bgm_id', ''))
-            
-            # 检查是否已处理
             if bgm_id in self.processed_ids:
                 return
-            
-            # 获取别名列表
             alias_cols = [col for col in game_data.keys() if col.startswith("别名")]
-            aliases = [str(game_data[col]).strip() for col in alias_cols 
-                      if game_data[col] and str(game_data[col]).strip()]
-            
-            # 获取原始分数
+            aliases = [str(game_data[col]).strip() for col in alias_cols if game_data[col] and str(game_data[col]).strip()]
             original_score = 0.0
             if 'score' in game_data and game_data['score']:
                 try:
                     original_score = float(game_data['score'])
                 except (ValueError, TypeError):
                     pass
-            
-            # 获取token
             token = self.api_client.token_ref.get("value")
             if not token:
                 print("无法获取访问令牌")
                 return
-            
-            # 查找最佳匹配
             best_match = None
             best_score = -1.0
             match_source = ""
-            
             for i, alias in enumerate(aliases):
                 matches = await self._search_game_async(session, alias, token)
                 if matches and matches[0]["score"] > best_score:
                     best_match = matches[0]
                     best_score = best_match["score"]
                     match_source = f"别名{i+1}"
-            
-            # 比较分数，决定是否使用新数据
             if best_match and best_score > original_score:
-                # 获取会社信息
                 org_id = str(best_match.get("orgId", ""))
                 org_info = None
-                
                 if org_id:
-                    # 异步获取会社详细信息
                     org_details = await self._get_org_details_async(session, org_id, token)
                     if org_details:
                         org_info = org_details
                     else:
-                        # 兜底使用基础信息
                         org_info = {
                             "id": org_id,
                             "name": best_match.get("orgName", ""),
                             "website": "",
                             "description": ""
                         }
-                
-                # 构建结果数据
+                # 强制所有字段都写入，严格对齐DataProcessor.EXCEL_COLUMNS_MATCHED
                 result_data = {
                     "bgm_id": bgm_id,
                     "bgm游戏": game_data.get('游戏名', ''),
                     "日文名 (原始)": game_data.get('日文名', ''),
                     "中文名 (原始)": game_data.get('中文名', ''),
-                    "name": best_match["name"],
-                    "chineseName": best_match["chineseName"],
-                    "ym_id": best_match["ym_id"],
-                    "score": best_match["score"],
+                    "name": best_match.get("name", ""),
+                    "chineseName": best_match.get("chineseName", ""),
+                    "ym_id": best_match.get("ym_id", ""),
+                    "score": best_match.get("score", ""),
                     "orgId": org_id,
                     "orgName": (org_info or {}).get("name", ""),
                     "orgWebsite": (org_info or {}).get("website", ""),
                     "orgDescription": (org_info or {}).get("description", ""),
                     "匹配来源": match_source
                 }
-                
                 await buffer_manager.put_data(result_data)
-            
-            # 标记为已处理
             self.processed_ids.add(bgm_id)
-            
-            # 请求间隔
             await asyncio.sleep(self.config.delay_between_requests)
-            
         except Exception as e:
             print(f"处理游戏别名时出错: {e}")
     
