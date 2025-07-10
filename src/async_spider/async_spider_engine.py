@@ -10,6 +10,7 @@ import os
 import json
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass
+import random
 
 from .congestion_control import CongestionController
 from .buffer_manager import BufferManager, BufferConfig
@@ -359,65 +360,87 @@ class AsyncSpiderEngine:
             if return_status:
                 return 503
             return None
-    
+
     async def crawl_games_async(self,
                               input_file: str,
                               output_file: str,
                               unmatched_file: str) -> None:
+        """
+        高级拥塞控制+503冷却防风控重构版
+        """
         try:
             if not self.api_client.initialize_token():
                 return
             import pandas as pd
+            from defense.cooldown_guard import CooldownGuard
             df = pd.read_excel(input_file)
             df = df[~df['id'].astype(str).isin(self.processed_ids)]
             all_rows = df.to_dict(orient='records')
-            batch_size = 10
-            delay = 2.0
-            min_delay = 1.0
+            total = len(all_rows)
+            processed = 0
+
+            # 拥塞控制参数
+            cwnd = 1
+            delay = 1.0
+            min_delay = 0.5
             max_delay = 10.0
-            max_retry = 5
+            max_cwnd = 20
+
             buffer_manager = BufferManager(
                 output_file=output_file,
                 buffer_config=self.buffer_config
             )
             await buffer_manager.start()
             self.session = await self._create_session()
-            total = len(all_rows)
-            processed = 0
-            for batch_start in range(0, total, batch_size):
-                batch = all_rows[batch_start:batch_start+batch_size]
-                fail_items = []
-                success, fail_503 = 0, 0
+
+            cooldown_guard = CooldownGuard(max_consecutive_503=3, cooldown_seconds=10)
+            retry_queue = []
+            batch_start = 0
+
+            while batch_start < total or retry_queue:
+                # 优先处理重试池
+                if retry_queue:
+                    batch = retry_queue[:cwnd]
+                    retry_queue = retry_queue[cwnd:]
+                else:
+                    batch = all_rows[batch_start:batch_start + cwnd]
+                    batch_start += cwnd
+
+                fail_503 = 0
+                success = 0
                 for item in batch:
-                    for retry in range(max_retry):
-                        try:
-                            resp = await self._process_game_item(self.session, item, buffer_manager, return_status=True)
-                            if resp == 503:
-                                fail_503 += 1
-                                await asyncio.sleep(delay * (2 ** retry))
-                            elif resp == 'success':
-                                success += 1
-                                break
-                            else:
-                                break
-                        except Exception:
-                            fail_503 += 1
-                            await asyncio.sleep(delay * (2 ** retry))
+                    resp = await self._process_game_item(self.session, item, buffer_manager, return_status=True)
+                    if resp == 503:
+                        cooldown_guard.record_503()
+                        retry_queue.append(item)
+                        fail_503 += 1
+                        if cooldown_guard.should_cooldown():
+                            await cooldown_guard.cooldown()
+                            break  # 冷却后本轮直接中断，防止继续打爆
+                    elif resp == 'success':
+                        cooldown_guard.record_success()
+                        success += 1
                     else:
-                        fail_items.append(item)
+                        pass  # 其它情况可选处理
                     await asyncio.sleep(delay)
+
                 processed += len(batch)
-                print(f"进度: {min(processed, total)}/{total} ({min(processed, total)/total*100:.1f}%)")
-                # 动态调整速率
+                print(f"进度: {processed}/{total} ({processed/total*100:.1f}%)  当前cwnd={cwnd}, delay={delay:.2f}s, retry池={len(retry_queue)}")
+
+                # 拥塞控制算法
                 total_req = success + fail_503
-                rate_503 = fail_503 / total_req if total_req else 0
-                if rate_503 > 0.2:
-                    delay = min(delay + 1, max_delay)
-                elif rate_503 < 0.05:
-                    delay = max(delay - 0.2, min_delay)
-                await asyncio.sleep(10)
-                if fail_items:
-                    all_rows.extend(fail_items)
+                fail_rate = fail_503 / total_req if total_req else 0
+                if fail_rate > 0.3:
+                    cwnd = max(1, cwnd // 2)
+                    delay = min(delay * 2, max_delay)
+                    print(f"[拥塞] cwnd下降到{cwnd}, 延迟升高到 {delay:.1f}s")
+                elif fail_rate < 0.05 and success > 0:
+                    cwnd = min(cwnd + 1, max_cwnd)
+                    delay = max(delay * 0.9, min_delay)
+                    print(f"[加速] cwnd上升到{cwnd}, 延迟降低到 {delay:.1f}s")
+
+                await asyncio.sleep(2)
+
             await asyncio.sleep(2)
         except Exception as e:
             print(f"主循环异常: {e}")
