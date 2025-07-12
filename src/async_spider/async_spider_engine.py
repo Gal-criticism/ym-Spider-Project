@@ -6,6 +6,8 @@ from typing import List, Dict, Any, Optional, Callable
 from asyncio import Semaphore
 from tqdm import tqdm
 
+from ..utils.logger import Logger
+
 
 
 
@@ -45,6 +47,9 @@ class AsyncSpiderEngine:
         self.consecutive_503_errors = 0
         self.total_503_errors = 0
         
+        # 日志记录器
+        self.logger = Logger(silent_mode=True)
+        
 
         
         # API配置
@@ -71,8 +76,10 @@ class AsyncSpiderEngine:
                         self.access_token = result.get("access_token")
                         return True
                     else:
+                        self.logger.log_error(f"获取 token 失败: {response.status}, {await response.text()}")
                         return False
         except Exception as e:
+            self.logger.log_error(f"获取 token 异常: {e}")
             return False
     
     async def _rate_limit(self):
@@ -118,10 +125,12 @@ class AsyncSpiderEngine:
                             return await response.json()
                         elif response.status == 401:
                             # Token失效，重新获取
+                            self.logger.log_important("Token 失效，正在重新获取…")
                             if await self.initialize_token():
                                 headers["Authorization"] = f"Bearer {self.access_token}"
                                 continue
                             else:
+                                self.logger.log_error("重新获取 token 失败")
                                 self.failed_requests += 1
                                 return None
                         elif response.status == 503:
@@ -135,6 +144,7 @@ class AsyncSpiderEngine:
                                 await asyncio.sleep(backoff_time)
                                 continue
                             else:
+                                self.logger.log_error(f"503错误重试失败，已重试{self.max_retries}次")
                                 self.failed_requests += 1
                                 return None
                         else:
@@ -142,6 +152,7 @@ class AsyncSpiderEngine:
                                 await asyncio.sleep(2 ** attempt)  # 指数退避
                                 continue
                             else:
+                                self.logger.log_error(f"请求失败: {response.status}, {await response.text()}")
                                 self.failed_requests += 1
                                 return None
                                 
@@ -189,6 +200,9 @@ class AsyncSpiderEngine:
             if not response_data:
                 return []
             
+            # 记录API响应到日志文件
+            self.logger.log_api_response(keyword, response_data)
+            
             # 解析响应数据
             results = response_data.get("data", {}).get("result", [])
             parsed_results = []
@@ -205,6 +219,13 @@ class AsyncSpiderEngine:
                     "website": item.get("orgWebsite", ""),
                     "description": item.get("orgDescription", "")
                 }
+                
+                # 记录会社信息到日志
+                if org_info:
+                    self.logger.log_api_response("org_info_found", {
+                        "org_name": org_info.get('name', ''),
+                        "org_id": org_info.get('id', '')
+                    })
                 
                 parsed_results.append({
                     "name": item.get("name", ""),
@@ -245,8 +266,12 @@ class AsyncSpiderEngine:
             if not response_data:
                 return None
             
+            # 记录会社详情API响应到日志文件
+            self.logger.log_api_response(f"org_details_{org_id}", response_data)
+            
             org_data = response_data.get("data", {}).get("org", {})
             if not org_data:
+                self.logger.log_info("API 响应中未找到会社信息")
                 return None
             
             # 提取官网地址

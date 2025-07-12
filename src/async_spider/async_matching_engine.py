@@ -7,6 +7,7 @@ from tqdm import tqdm
 from .async_spider_engine import AsyncSpiderEngine
 from .buffer_manager import BufferManager, BufferConfig, WriteStrategy
 from ..data.data_processor import DataProcessor
+from ..utils.logger import Logger
 
 
 class AsyncMatchingEngine:
@@ -15,7 +16,8 @@ class AsyncMatchingEngine:
     def __init__(self, 
                  max_concurrent: int = 5,  # 降低默认并发数，避免503错误
                  buffer_size: int = 500,
-                 write_interval: float = 3.0):
+                 write_interval: float = 3.0,
+                 batch_size: int = 50):  # 添加批次大小参数
         """
         初始化异步匹配引擎
         
@@ -23,13 +25,14 @@ class AsyncMatchingEngine:
             max_concurrent: 最大并发数
             buffer_size: 缓冲区大小
             write_interval: 写入间隔（秒）
+            batch_size: 批次大小（每批处理的任务数量）
         """
         # 初始化异步爬虫引擎
         self.spider = AsyncSpiderEngine(
             max_concurrent=max_concurrent,
-            request_delay=0.2,  # 增加请求间隔，减少503错误
-            max_retries=5,      # 增加重试次数
-            timeout=30
+            request_delay=0.1,  # 减少请求间隔，提高速度
+            max_retries=3,      # 减少重试次数，避免过多延迟
+            timeout=20          # 减少超时时间
         )
         
         # 初始化缓冲池管理器
@@ -44,6 +47,12 @@ class AsyncMatchingEngine:
         
         # 数据处理器
         self.data_processor = DataProcessor()
+        
+        # 批次大小
+        self.batch_size = batch_size
+        
+        # 日志记录器
+        self.logger = Logger(silent_mode=True)
         
         # 统计信息
         self.processed_count = 0
@@ -170,18 +179,16 @@ class AsyncMatchingEngine:
     
     async def _process_tasks_batch(self, tasks: List[Dict], processed_orgs: Dict):
         """批量处理任务"""
-        batch_size = 50  # 每批处理50个任务
-        
-        print(f"开始处理 {len(tasks)} 个任务，批次大小: {batch_size}")
+        print(f"开始处理 {len(tasks)} 个任务，批次大小: {self.batch_size}")
         
         # 创建进度条
         pbar = tqdm(total=len(tasks), desc="异步处理游戏", unit="个")
         
         try:
-            for i in range(0, len(tasks), batch_size):
-                batch = tasks[i:i + batch_size]
-                batch_num = i // batch_size + 1
-                total_batches = (len(tasks) + batch_size - 1) // batch_size
+            for i in range(0, len(tasks), self.batch_size):
+                batch = tasks[i:i + self.batch_size]
+                batch_num = i // self.batch_size + 1
+                total_batches = (len(tasks) + self.batch_size - 1) // self.batch_size
                 
                 # 创建协程任务
                 coroutines = [self._process_single_task(task, processed_orgs) for task in batch]
@@ -351,18 +358,16 @@ class AsyncMatchingEngine:
     
     async def _process_alias_tasks_batch(self, tasks: List[Dict], processed_orgs: Dict):
         """批量处理别名任务"""
-        batch_size = 50
-        
-        print(f"开始处理 {len(tasks)} 个任务（别名匹配），批次大小: {batch_size}")
+        print(f"开始处理 {len(tasks)} 个任务（别名匹配），批次大小: {self.batch_size}")
         
         # 创建进度条
         pbar = tqdm(total=len(tasks), desc="异步处理游戏（别名匹配）", unit="个")
         
         try:
-            for i in range(0, len(tasks), batch_size):
-                batch = tasks[i:i + batch_size]
-                batch_num = i // batch_size + 1
-                total_batches = (len(tasks) + batch_size - 1) // batch_size
+            for i in range(0, len(tasks), self.batch_size):
+                batch = tasks[i:i + self.batch_size]
+                batch_num = i // self.batch_size + 1
+                total_batches = (len(tasks) + self.batch_size - 1) // self.batch_size
                 
                 coroutines = [self._process_single_alias_task(task, processed_orgs) for task in batch]
                 results = await asyncio.gather(*coroutines, return_exceptions=True)
