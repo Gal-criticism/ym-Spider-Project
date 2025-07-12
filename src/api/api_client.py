@@ -40,27 +40,16 @@ class YMGalAPIClient:
         self.logger.log_error(f"获取 token 失败: {response.status_code}, {response.text}")
         return None
     
-    def parse_search_response(self, response: requests.Response) -> List[Dict[str, Any]]:
+    def parse_search_response(self, response) -> List[Dict[str, Any]]:
         """
         解析 *search-game* 接口返回，提取游戏及其会社信息。
-
-        参数
-        ----
-        response : requests.Response
-            月幕 *search-game* API 响应对象。
-
-        Returns
-        -------
-        list[dict]
-            解析后的结果列表，每个元素均包含：
-            - ``name``：日文 / 英文原名
-            - ``chineseName``：中文名(可能为空)
-            - ``ym_id``：月幕游戏 ID
-            - ``score``：月幕算法打分 (匹配度)
-            - ``orgId`` / ``orgName`` / ``orgWebsite`` / ``orgDescription``：会社信息
+        response 可以是 requests.Response 或 dict
         """
         try:
-            response_data = response.json()
+            if isinstance(response, dict):
+                response_data = response
+            else:
+                response_data = response.json()
             # 将API响应保存到日志文件
             self.logger.log_api_response("search_game", response_data)
             results = response_data.get("data", {}).get("result", [])
