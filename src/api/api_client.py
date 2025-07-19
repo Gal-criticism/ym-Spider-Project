@@ -9,9 +9,9 @@ class YMGalAPIClient:
     """月幕游戏API客户端"""
     
     def __init__(self):
-        self.base_url = "https://www.ymgal.games"
-        self.client_id = "ymgal"
-        self.client_secret = "luna0327"
+        self.base_url = "https://www.ymgal.com"
+        self.client_id = ""
+        self.client_secret = ""
         self.token_ref = {"value": None}
         self.logger = Logger(silent_mode=True)  # 使用静默模式
     
@@ -111,7 +111,7 @@ class YMGalAPIClient:
         threshold: float = 0.8
     ) -> List[Dict[str, Any]]:
         """
-        根据 *keyword* 在月幕搜索游戏并返回最相关的前 ``top_k`` 条结果。
+        根据 *keyword* 在网站搜索并返回最相关的前 ``top_k`` 条结果。
 
         特性：
         --------
@@ -121,7 +121,7 @@ class YMGalAPIClient:
         参数
         ----
         keyword : str
-            待搜索的 Bangumi 游戏名称。
+            待搜索的产品名称。
         top_k : int, default=3
             未触发阈值过滤时，返回结果数。
         threshold : float, default=0.8
@@ -175,7 +175,12 @@ class YMGalAPIClient:
                 self.logger.log_error("重新获取 token 失败")
                 return []
 
-            # 3. 其它错误 -> 直接返回空
+            # 3. 403/404/410 致命错误 -> 立即报错并终止
+            elif response.status_code in (403, 404, 410):
+                self.logger.log_error(f"接口返回致命错误: {response.status_code}, {response.text}")
+                raise RuntimeError(f"接口返回致命错误: {response.status_code}")
+
+            # 4. 其它错误 -> 直接返回空
             else:
                 self.logger.log_error(f"搜索失败: {response.status_code}, {response.text}")
                 return []
@@ -205,11 +210,11 @@ class YMGalAPIClient:
 
             if response.status_code == 200:
                 data = response.json()
-                # 记录会社信息API响应
+                # 记录公司信息API响应
                 self.logger.log_api_response(f"org_details_{org_id}", data)
                 org_data = data.get("data", {}).get("org", {})
                 if not org_data:
-                    self.logger.log_info("API 响应中未找到会社信息")
+                    self.logger.log_info("API 响应中未找到公司信息")
                     return None
 
                 # 按优先级提取官网地址，fallback 使用第一个
@@ -240,6 +245,11 @@ class YMGalAPIClient:
             if response.status_code == 401:  # token 失效, 交由外层处理
                 self.logger.log_info("公司信息获取时 token 失效")
                 return None
+
+            # 新增：403/404/410 致命错误
+            if response.status_code in (403, 404, 410):
+                self.logger.log_error(f"接口返回致命错误: {response.status_code}, {response.text}")
+                raise RuntimeError(f"接口返回致命错误: {response.status_code}")
 
             self.logger.log_error(f"获取会社信息失败: {response.status_code}")
             return None

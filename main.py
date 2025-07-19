@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bangumi-月幕游戏匹配工具
+匹配工具
 主程序入口
 """
 

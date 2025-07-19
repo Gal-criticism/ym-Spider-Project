@@ -9,11 +9,11 @@ class OrganizationManager:
         self.processed_orgs = {}
     
     def get_organization_details(self, org_id: str) -> Optional[Dict[str, Any]]:
-        """获取会社详细信息"""
+        """获取公司详细信息"""
         return self.api_client.get_organization_details(org_id)
     
     def should_retry_org_query(self, org_id: str, org_info: Dict[str, Any]) -> bool:
-        """判断是否需要重试查询会社信息"""
+        """判断是否需要重试查询公司信息"""
         if org_id not in self.processed_orgs:
             return True
         
@@ -25,7 +25,7 @@ class OrganizationManager:
         return False
     
     def update_org_info(self, org_id: str, org_info: Dict[str, Any]) -> None:
-        """更新会社信息"""
+        """更新公司信息"""
         if org_id not in self.processed_orgs:
             self.processed_orgs[org_id] = {"info": {}, "retry_count": 0}
         

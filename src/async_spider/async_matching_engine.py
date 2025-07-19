@@ -109,28 +109,27 @@ class AsyncMatchingEngine:
         print(f"  总写入次数: {buffer_stats['total_writes']}")
         print(f"  总数据项: {buffer_stats['total_items']}")
     
-    async def match_bgm_games_async(
+    async def match_bgm_products_async(
         self,
         input_file: str,
-        output_file: str = "save/ymgames_matched_async.xlsx",
-        unmatched_file: str = "save/ymgames_unmatched_async.xlsx",
+        output_file: str = "save/products_matched_async.xlsx",
+        unmatched_file: str = "save/products_unmatched_async.xlsx",
         org_output_file: str = "save/organizations_info_async.xlsx"
     ) -> None:
         """
-        异步匹配Bangumi游戏数据
-        
+        异步匹配原始产品数据
         Args:
             input_file: 输入文件路径
             output_file: 匹配结果输出文件
             unmatched_file: 未匹配结果输出文件
-            org_output_file: 会社信息输出文件
+            org_output_file: 公司信息输出文件
         """
         # 确保输出目录存在
         os.makedirs("save", exist_ok=True)
         
         # 注册输出文件到缓冲池
         matched_columns = [
-            "bgm_id", "bgm游戏", "日文名 (原始)", "中文名 (原始)",
+            "bgm_id", "bgm产品",
             "name", "chineseName", "ym_id", "score",
             "orgId", "orgName", "orgWebsite", "orgDescription",
             "匹配来源"
@@ -141,7 +140,7 @@ class AsyncMatchingEngine:
         ]
         
         self.buffer_manager.register_file("matched", output_file, matched_columns)
-        self.buffer_manager.register_file("unmatched", unmatched_file, ["原始的未匹配bgm游戏名称"])
+        self.buffer_manager.register_file("unmatched", unmatched_file, ["原始的未匹配bgm产品名称"])
         self.buffer_manager.register_file("org", org_output_file, org_columns)
         
         # 读取输入数据
@@ -150,7 +149,7 @@ class AsyncMatchingEngine:
         # 获取已处理的ID（断点续传）
         processed_ids = self.data_processor.get_processed_ids(output_file)
         
-        # 获取已处理的会社信息
+        # 获取已处理的公司信息
         processed_orgs = self.data_processor.get_processed_orgs(org_output_file)
         
         # 创建任务列表
@@ -182,7 +181,7 @@ class AsyncMatchingEngine:
         print(f"开始处理 {len(tasks)} 个任务，批次大小: {self.batch_size}")
         
         # 创建进度条
-        pbar = tqdm(total=len(tasks), desc="异步处理游戏", unit="个")
+        pbar = tqdm(total=len(tasks), desc="异步处理产品", unit="个")
         
         try:
             for i in range(0, len(tasks), self.batch_size):
@@ -220,7 +219,7 @@ class AsyncMatchingEngine:
             pbar.close()
     
     async def _process_single_task(self, task: Dict, processed_orgs: Dict) -> Dict:
-        """处理单个任务"""
+        """处理单个产品任务"""
         bgm_id = task["id"]
         jp_name = task["jp_name"]
         cn_name = task["cn_name"]
@@ -262,9 +261,7 @@ class AsyncMatchingEngine:
             # 准备匹配结果数据
             matched_data = {
                 "bgm_id": bgm_id,
-                "bgm游戏": jp_name if jp_name else cn_name,
-                "日文名 (原始)": jp_name,
-                "中文名 (原始)": cn_name,
+                "bgm产品": jp_name if jp_name else cn_name,
                 "name": best_match["name"],
                 "chineseName": best_match["chineseName"],
                 "ym_id": best_match["ym_id"],
@@ -281,27 +278,27 @@ class AsyncMatchingEngine:
             return {"matched": True, "data": matched_data}
         else:
             # 记录未匹配
-            unmatched_data = {"原始的未匹配bgm游戏名称": f"ID_{bgm_id}_未匹配"}
+            unmatched_data = {"原始的未匹配bgm产品名称": f"ID_{bgm_id}_未匹配"}
             await self.buffer_manager.put_data("unmatched", unmatched_data)
             
             return {"matched": False, "data": unmatched_data}
     
-    async def match_bgm_games_with_aliases_async(
+    async def match_bgm_products_with_aliases_async(
         self,
         input_file: str,
-        output_file: str = "save/ymgames_matched_aliases_async.xlsx",
-        unmatched_file: str = "save/ymgames_unmatched_aliases_async.xlsx",
+        output_file: str = "save/products_matched_aliases_async.xlsx",
+        unmatched_file: str = "save/products_unmatched_aliases_async.xlsx",
         org_output_file: str = "save/organizations_info_aliases_async.xlsx"
     ) -> None:
         """
-        异步匹配包含别名的Bangumi游戏数据
+        异步匹配包含别名的原始产品数据
         """
         # 确保输出目录存在
         os.makedirs("save", exist_ok=True)
         
         # 注册输出文件到缓冲池
         matched_columns = [
-            "bgm_id", "bgm游戏", "name", "chineseName", "ym_id", "score",
+            "bgm_id", "bgm产品", "name", "chineseName", "ym_id", "score",
             "orgId", "orgName", "orgWebsite", "orgDescription", "匹配来源"
         ]
         
@@ -310,7 +307,7 @@ class AsyncMatchingEngine:
         ]
         
         self.buffer_manager.register_file("matched", output_file, matched_columns)
-        self.buffer_manager.register_file("unmatched", unmatched_file, ["原始的未匹配bgm游戏名称"])
+        self.buffer_manager.register_file("unmatched", unmatched_file, ["原始的未匹配bgm产品名称"])
         self.buffer_manager.register_file("org", org_output_file, org_columns)
         
         # 读取输入数据
@@ -319,7 +316,7 @@ class AsyncMatchingEngine:
         # 获取已处理的ID（断点续传）
         processed_ids = self.data_processor.get_processed_ids(output_file)
         
-        # 获取已处理的会社信息
+        # 获取已处理的公司信息
         processed_orgs = self.data_processor.get_processed_orgs(org_output_file)
         
         # 创建任务列表
@@ -361,7 +358,7 @@ class AsyncMatchingEngine:
         print(f"开始处理 {len(tasks)} 个任务（别名匹配），批次大小: {self.batch_size}")
         
         # 创建进度条
-        pbar = tqdm(total=len(tasks), desc="异步处理游戏（别名匹配）", unit="个")
+        pbar = tqdm(total=len(tasks), desc="异步处理产品（别名匹配）", unit="个")
         
         try:
             for i in range(0, len(tasks), self.batch_size):
@@ -429,7 +426,7 @@ class AsyncMatchingEngine:
             # 准备新匹配结果数据
             matched_data = {
                 "bgm_id": bgm_id,
-                "bgm游戏": original_data.get('bgm游戏') or original_data.get('原始bgm游戏名称'),
+                "bgm产品": original_data.get('bgm产品') or original_data.get('原始bgm产品名称'),
                 "name": best_match["name"],
                 "chineseName": best_match["chineseName"],
                 "ym_id": best_match["ym_id"],
@@ -448,7 +445,7 @@ class AsyncMatchingEngine:
             if original_data.get("name"):  # 如果有原始匹配结果
                 matched_data = {
                     "bgm_id": bgm_id,
-                    "bgm游戏": original_data.get('bgm游戏') or original_data.get('原始bgm游戏名称'),
+                    "bgm产品": original_data.get('bgm产品') or original_data.get('原始bgm产品名称'),
                     "name": original_data.get('name'),
                     "chineseName": original_data.get('chineseName'),
                     "ym_id": original_data.get('ym_id'),
@@ -463,6 +460,6 @@ class AsyncMatchingEngine:
                 return {"matched": True, "data": matched_data}
             else:
                 # 记录未匹配
-                unmatched_data = {"原始的未匹配bgm游戏名称": f"ID_{bgm_id}_未匹配"}
+                unmatched_data = {"原始的未匹配bgm产品名称": f"ID_{bgm_id}_未匹配"}
                 await self.buffer_manager.put_data("unmatched", unmatched_data)
                 return {"matched": False, "data": unmatched_data} 

@@ -53,9 +53,9 @@ class AsyncSpiderEngine:
 
         
         # API配置
-        self.base_url = "https://www.ymgal.games"
-        self.client_id = "ymgal"
-        self.client_secret = "luna0327"
+        self.base_url = "https://www.ym.com"
+        self.client_id = "ym"
+        self.client_secret = "abc114514"
         self.access_token = None
         
     async def initialize_token(self) -> bool:
@@ -133,6 +133,10 @@ class AsyncSpiderEngine:
                                 self.logger.log_error("重新获取 token 失败")
                                 self.failed_requests += 1
                                 return None
+                        # 新增：403/404/410 致命错误
+                        elif response.status in (403, 404, 410):
+                            self.logger.log_error(f"接口返回致命错误: {response.status}, {await response.text()}")
+                            raise RuntimeError(f"接口返回致命错误: {response.status}")
                         elif response.status == 503:
                             # 503错误，增加延迟并重试
                             self.consecutive_503_errors += 1

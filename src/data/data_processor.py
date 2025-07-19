@@ -9,7 +9,7 @@ class DataProcessor:
     
     # Excel列定义
     EXCEL_COLUMNS_MATCHED = [
-        "bgm_id", "bgm游戏", "日文名 (原始)", "中文名 (原始)",
+        "bgm_id", "bgm产品",
         "name", "chineseName", "ym_id", "score",
         "orgId", "orgName", "orgWebsite", "orgDescription",
         "匹配来源"
@@ -75,7 +75,7 @@ class DataProcessor:
 
     def append_unmatched_to_excel(self, name: str, unmatched_file: str) -> None:
         """记录未匹配成功的 Bangumi 名称。"""
-        df = pd.DataFrame([[name]], columns=["原始的未匹配bgm游戏名称"])
+        df = pd.DataFrame([[name]], columns=["原始的未匹配bgm产品名称"])
         if not os.path.exists(unmatched_file):
             df.to_excel(unmatched_file, index=False)
         else:
@@ -88,17 +88,14 @@ class DataProcessor:
         self.append_to_excel([org_info], output_file)
     
     def read_bgm_data(self, input_file: str) -> pd.DataFrame:
-        """读取Bangumi源文件"""
+        """读取原始产品源文件"""
         df_bgm = pd.read_excel(input_file, engine="openpyxl")
         print(f"DEBUG: 识别到的 Excel 列名：{df_bgm.columns.tolist()}")
-        
-        if "日文名" not in df_bgm.columns or "中文名" not in df_bgm.columns:
-            raise ValueError("Excel 中必须包含 '日文名' 和 '中文名' 列")
         
         return df_bgm
     
     def read_bgm_data_with_aliases(self, input_file: str) -> pd.DataFrame:
-        """读取包含别名的Bangumi源文件"""
+        """读取包含别名的原始产品源文件"""
         df_bgm = pd.read_excel(input_file, engine="openpyxl")
         print(f"DEBUG: 识别到的 Excel 列名：{df_bgm.columns.tolist()}")
         return df_bgm
@@ -109,10 +106,10 @@ class DataProcessor:
         if os.path.exists(output_file):
             try:
                 df_exist = pd.read_excel(output_file, engine="openpyxl")
-                if 'bgm_id' in df_exist.columns:
-                    processed_ids = set(df_exist["bgm_id"].dropna().astype(str))
+                if 'id' in df_exist.columns:
+                    processed_ids = set(df_exist["id"].dropna().astype(str))
                 else:
-                    print("警告: 输出文件中未找到 'bgm_id' 列，断点续跑可能不准确。")
+                    print("警告: 输出文件中未找到 'id' 列，断点续跑可能不准确。")
             except Exception as exc:
                 print("读取已匹配文件失败，将重新创建：", exc)
         return processed_ids

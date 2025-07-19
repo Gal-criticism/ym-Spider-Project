@@ -9,7 +9,7 @@ from ..data.data_processor import DataProcessor
 
 
 class MatchingEngine:
-    """匹配引擎，负责游戏匹配逻辑"""
+    """匹配引擎，负责产品匹配逻辑"""
     
     def __init__(self, api_client: YMGalAPIClient, data_processor: DataProcessor):
         self.api_client = api_client
@@ -19,21 +19,21 @@ class MatchingEngine:
         """利用 ``difflib.SequenceMatcher`` 计算字符串相似度。"""
         return SequenceMatcher(None, str1.lower(), str2.lower()).ratio()
     
-    def match_bgm_games_and_save(
+    def match_bgm_products_and_save(
         self,
         input_file: str = "bgm_archive_20250525 (1).xlsx",
-        output_file: str = "ymgames_matched.xlsx",
-        unmatched_file: str = "ymgames_unmatched.xlsx",
+        output_file: str = "products_matched.xlsx",
+        unmatched_file: str = "products_unmatched.xlsx",
         org_output_file: str = "organizations_info.xlsx"
     ) -> None:
         """
-        读取 Bangumi Excel -> 月幕搜索匹配 -> 写结果
-        支持 **断点续跑** ：已处理过的 Bangumi 名称会跳过。
+        读取原始数据Excel -> 目标平台搜索匹配 -> 写结果
+        支持 **断点续跑** ：已处理过的原始名称会跳过。
         """
-        # 1. 读取 Bangumi 源文件
+        # 1. 读取原始源文件
         df_bgm = self.data_processor.read_bgm_data(input_file)
         
-        game_names_cn: List[str] = df_bgm["中文名"].dropna().astype(str).tolist()
+        product_names_cn: List[str] = df_bgm["中文名"].dropna().astype(str).tolist()
         
         # 2. 加载已处理过的 ID (用于断点续跑)
         processed_ids = self.data_processor.get_processed_ids(output_file)
@@ -46,11 +46,11 @@ class MatchingEngine:
         self.data_processor.init_excel(output_file)
         self.data_processor.init_org_excel(org_output_file)
 
-        # 4. 加载已有会社信息到内存，避免重复查询
+        # 4. 加载已有公司信息到内存，避免重复查询
         processed_orgs = self.data_processor.get_processed_orgs(org_output_file)
 
-        # 5. 遍历 Bangumi 行并匹配
-        for idx, row in tqdm(df_bgm.iterrows(), total=len(df_bgm), desc="处理游戏"):
+        # 5. 遍历原始数据行并匹配
+        for idx, row in tqdm(df_bgm.iterrows(), total=len(df_bgm), desc="处理产品"):
             bgm_id = str(row['id']) if 'id' in row and pd.notna(row['id']) else f"ROW_{idx}"
             
             if bgm_id in processed_ids:
@@ -82,7 +82,7 @@ class MatchingEngine:
                     best_match = cn_matches[0]
                     best_score = best_match["score"]
                     match_source = "中文名"
-                    
+
             if best_match:
                 row_list: List[Dict[str, Any]] = []
                 # ---- 公司信息处理 ----------------------------------------
@@ -112,9 +112,7 @@ class MatchingEngine:
                 # ---- 组装行数据 -----------------------------------------
                 row_data = {
                     "bgm_id": bgm_id,
-                    "bgm游戏": jp_name if jp_name else cn_name, # 使用非空的原始名称作为bgm游戏
-                    "日文名 (原始)": jp_name,
-                    "中文名 (原始)": cn_name,
+                    "bgm产品": jp_name if jp_name else cn_name, # 使用非空的原始名称作为bgm产品
                     "name": best_match["name"],
                     "chineseName": best_match["chineseName"],
                     "ym_id": best_match["ym_id"],
@@ -136,18 +134,18 @@ class MatchingEngine:
 
         print("\n所有匹配结果已保存。🎉")
     
-    def match_bgm_games_with_aliases_and_save(
+    def match_bgm_products_with_aliases_and_save(
         self,
         input_file: str = "主表_updated_processed_aliases_20250621_124012.xlsx",
-        output_file: str = "ymgames_matched.xlsx",
-        unmatched_file: str = "ymgames_unmatched.xlsx",
+        output_file: str = "products_matched.xlsx",
+        unmatched_file: str = "products_unmatched.xlsx",
         org_output_file: str = "organizations_info.xlsx"
     ) -> None:
         """
-        读取包含别名的 Bangumi Excel -> 月幕搜索匹配 -> 写结果
-        支持 **断点续跑** ：已处理过的 Bangumi 名称会跳过。
+        读取包含别名的原始数据Excel -> 目标平台搜索匹配 -> 写结果
+        支持 **断点续跑** ：已处理过的原始名称会跳过。
         """
-        # 1. 读取 Bangumi 源文件
+        # 1. 读取原始源文件
         df_bgm = self.data_processor.read_bgm_data_with_aliases(input_file)
 
         # 2. 加载已处理过的 ID (用于断点续跑)
@@ -161,11 +159,11 @@ class MatchingEngine:
         self.data_processor.init_excel(output_file)
         self.data_processor.init_org_excel(org_output_file)
 
-        # 4. 加载已有会社信息到内存，避免重复查询
+        # 4. 加载已有公司信息到内存，避免重复查询
         processed_orgs = self.data_processor.get_processed_orgs(org_output_file)
 
-        # 5. 遍历 Bangumi 行并匹配
-        for idx, row in tqdm(df_bgm.iterrows(), total=len(df_bgm), desc="处理游戏"):
+        # 5. 遍历原始数据行并匹配
+        for idx, row in tqdm(df_bgm.iterrows(), total=len(df_bgm), desc="处理产品"):
             bgm_id = str(row['bgm_id']) if 'bgm_id' in row and pd.notna(row['bgm_id']) else f"ROW_{idx}"
 
             if bgm_id in processed_ids:
@@ -194,8 +192,7 @@ class MatchingEngine:
                     best_match = matches[0]
                     best_score = best_match["score"]
                     match_source = f"别名{i+1}"
-            
-            # 3. 比较分数，决定使用新数据还是保留原始数据
+
             if best_match and best_score > original_score:
                 row_list: List[Dict[str, Any]] = []
                 # ---- 公司信息处理 (仅当别名更优时才查询) ----
@@ -224,7 +221,7 @@ class MatchingEngine:
                 # ---- 组装新行数据 ----
                 row_data = {
                     "bgm_id": bgm_id,
-                    "bgm游戏": row.get('bgm游戏') or row.get('原始bgm游戏名称'),
+                    "bgm产品": row.get('bgm产品') or row.get('原始bgm产品名称'),
                     "name": best_match["name"],
                     "chineseName": best_match["chineseName"],
                     "ym_id": best_match["ym_id"],
@@ -241,7 +238,7 @@ class MatchingEngine:
                 # ---- 组装原始行数据 ----
                 row_data = {
                     "bgm_id": bgm_id,
-                    "bgm游戏": row.get('bgm游戏') or row.get('原始bgm游戏名称'),
+                    "bgm产品": row.get('bgm产品') or row.get('原始bgm产品名称'),
                     "name": row.get('name'),
                     "chineseName": row.get('chineseName'),
                     "ym_id": row.get('ym_id'),
@@ -260,49 +257,49 @@ class MatchingEngine:
 
         print("\n所有匹配结果已保存。🎉")
     
-    def match_ym_with_bangumi(
+    def match_target_with_source(
         self,
-        ym_file: str = "ymgames_matched.xlsx",
-        bangumi_file: str = "processed_games_test5.xlsx",
-        output_file: str = "ym_bangumi_matched.csv"
+        target_file: str = "products_matched.xlsx",
+        source_file: str = "processed_products_test5.xlsx",
+        output_file: str = "target_source_matched.csv"
     ) -> None:
         """
-        按名称相似度将 **月幕游戏** 与 **Bangumi 游戏** 对齐，并输出 CSV 文件。
+        按名称相似度将 **目标平台产品** 与 **原始产品** 对齐，并输出 CSV 文件。
         """
-        print("开始匹配月幕游戏与 Bangumi 游戏…")
+        print("开始匹配目标平台产品与原始产品…")
 
         # 1. 读取两侧数据
-        ym_df = pd.read_excel(ym_file)
-        bg_df = pd.read_excel(bangumi_file)
+        target_df = pd.read_excel(target_file)
+        source_df = pd.read_excel(source_file)
 
         results = []
 
-        # 2. 遍历月幕条目
-        for _, ym_row in ym_df.iterrows():
-            ym_name = ym_row["name"]
-            ym_cn_name = ym_row["chineseName"]
-            ym_id = ym_row["ym_id"]
+        # 2. 遍历目标平台条目
+        for _, target_row in target_df.iterrows():
+            target_name = target_row["name"]
+            target_cn_name = target_row["chineseName"]
+            target_id = target_row["ym_id"]
 
             best_match, best_score = None, 0.0
-            for _, bg_row in bg_df.iterrows():
-                score = self.calculate_similarity(ym_name, bg_row["游戏名称"])
+            for _, source_row in source_df.iterrows():
+                score = self.calculate_similarity(target_name, source_row["产品名称"])
                 if score > best_score:
-                    best_match, best_score = bg_row, score
+                    best_match, best_score = source_row, score
 
             if best_match is not None and best_score >= 0.8:
                 results.append({
-                    "ym_id": ym_id,
-                    "ym_name": ym_name,
-                    "ym_chinese_name": ym_cn_name,
-                    "bangumi_id": best_match.get("游戏ID", ""),
-                    "bangumi_name": best_match["游戏名称"],
-                    "bangumi_score": best_match.get("评分", ""),
-                    "bangumi_rank": best_match.get("排名", ""),
-                    "bangumi_votes": best_match.get("投票数", ""),
-                    "bangumi_summary": best_match.get("简介", ""),
+                    "target_id": target_id,
+                    "target_name": target_name,
+                    "target_chinese_name": target_cn_name,
+                    "source_id": best_match.get("产品ID", ""),
+                    "source_name": best_match["产品名称"],
+                    "source_score": best_match.get("评分", ""),
+                    "source_rank": best_match.get("排名", ""),
+                    "source_votes": best_match.get("投票数", ""),
+                    "source_summary": best_match.get("简介", ""),
                     "match_score": round(best_score, 4)
                 })
-                print(f"匹配成功：{ym_name} -> {best_match['游戏名称']} (得分: {best_score:.4f})")
+                print(f"匹配成功：{target_name} -> {best_match['产品名称']} (得分: {best_score:.4f})")
 
         pd.DataFrame(results).to_csv(output_file, index=False, encoding="utf-8-sig")
         print(f"\n匹配结果已保存到：{output_file}  (共 {len(results)} 条)")

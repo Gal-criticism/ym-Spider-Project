@@ -62,9 +62,9 @@ class MainController:
     def select_matching_mode(self) -> str:
         """让用户选择匹配模式"""
         print("\n请选择匹配模式:")
-        print("1. 同步原始匹配 (使用日文名和中文名)")
-        print("2. 同步别名匹配 (使用别名列)")
-        print("3. 异步原始匹配 (高并发，推荐)")
+        print("1. 同步主名称匹配 (使用主名称字段)")
+        print("2. 同步别名匹配 (使用别名字段)")
+        print("3. 异步主名称匹配 (高并发，推荐)")
         print("4. 异步别名匹配 (高并发，推荐)")
         print("5. 性能对比测试 (同步 vs 异步)")
         
@@ -202,7 +202,7 @@ class MainController:
     
     def run_interactive(self) -> None:
         """交互式运行主程序"""
-        print("=== Bangumi-月幕游戏匹配工具 ===")
+        print("=== 产品/公司数据智能匹配工具 ===")
         
         # 选择匹配模式
         mode = self.select_matching_mode()
@@ -221,8 +221,8 @@ class MainController:
         else:
             # 同步模式使用原有文件名
             suffix = ""
-        output_file = f"save/ymgames_matched{suffix}.xlsx"
-        unmatched_file = f"save/ymgames_unmatched{suffix}.xlsx"
+        output_file = f"save/products_matched{suffix}.xlsx"
+        unmatched_file = f"save/products_unmatched{suffix}.xlsx"
         org_output_file = f"save/organizations_info{suffix}.xlsx"
         
         # 确保输出目录存在
